@@ -4,14 +4,9 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+
 import com.alerts.AlertGenerator;
 
-/**
- * Manages storage and retrieval of patient data within a healthcare monitoring
- * system.
- * This class serves as a repository for all patient records, organized by
- * patient IDs.
- */
 public class DataStorage {
     private Map<Integer, Patient> patientMap; // Stores patient objects indexed by their unique patient ID.
 
@@ -36,7 +31,7 @@ public class DataStorage {
      * @param timestamp        the time at which the measurement was taken, in
      *                         milliseconds since the Unix epoch
      */
-    public void addPatientData(int patientId, double measurementValue, String recordType, long timestamp) {
+    public synchronized void addPatientData(int patientId, double measurementValue, String recordType, long timestamp) {
         Patient patient = patientMap.get(patientId);
         if (patient == null) {
             patient = new Patient(patientId);
@@ -58,7 +53,7 @@ public class DataStorage {
      * @return a list of PatientRecord objects that fall within the specified time
      *         range
      */
-    public List<PatientRecord> getRecords(int patientId, long startTime, long endTime) {
+    public synchronized List<PatientRecord> getRecords(int patientId, long startTime, long endTime) {
         Patient patient = patientMap.get(patientId);
         if (patient != null) {
             return patient.getRecords(startTime, endTime);
@@ -71,7 +66,7 @@ public class DataStorage {
      *
      * @return a list of all patients
      */
-    public List<Patient> getAllPatients() {
+    public synchronized List<Patient> getAllPatients() {
         return new ArrayList<>(patientMap.values());
     }
 
@@ -79,33 +74,29 @@ public class DataStorage {
      * The main method for the DataStorage class.
      * Initializes the system, reads data into storage, and continuously monitors
      * and evaluates patient data.
-     * 
+     *
      * @param args command line arguments
      */
     public static void main(String[] args) {
-        // DataReader is not defined in this scope, should be initialized appropriately.
-        // DataReader reader = new SomeDataReaderImplementation("path/to/data");
+        // Initialize DataStorage
         DataStorage storage = new DataStorage();
 
-        // Assuming the reader has been properly initialized and can read data into the
-        // storage
-        // reader.readData(storage);
+        // Initialize WebSocketDataReader and connect to WebSocket server
+        DataReader reader = new WebSocketDataReader();
+        reader.readData(storage, "ws://localhost:8887");
 
-        // Example of using DataStorage to retrieve and print records for a patient
-        List<PatientRecord> records = storage.getRecords(1, 1700000000000L, 1800000000000L);
-        for (PatientRecord record : records) {
-            System.out.println("Record for Patient ID: " + record.getPatientId() +
-                    ", Type: " + record.getRecordType() +
-                    ", Data: " + record.getMeasurementValue() +
-                    ", Timestamp: " + record.getTimestamp());
-        }
-
-        // Initialize the AlertGenerator with the storage
+        // Continuously monitor and evaluate patient data
         AlertGenerator alertGenerator = new AlertGenerator(storage);
-
-        // Evaluate all patients' data to check for conditions that may trigger alerts
-        for (Patient patient : storage.getAllPatients()) {
-            alertGenerator.evaluateData(patient);
+        while (true) {
+            for (Patient patient : storage.getAllPatients()) {
+                alertGenerator.evaluateData(patient);
+            }
+            // Sleep for a while before the next evaluation cycle
+            try {
+                Thread.sleep(10000); // 10 seconds
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
         }
     }
 }
